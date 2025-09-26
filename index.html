@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>業務日報 ToDo カレンダー</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+  <style>
+    #worker,
+    #date {
+      border: none;
+      border-bottom: 1.5px solid #cccccc;
+      background: transparent;
+      outline: none;
+      padding: 2px 4px;
+      font-size: 1em;
+      transition: border-color 0.2s;
+    }
+    #worker:focus,
+    #date:focus {
+      border-bottom: 2px solid #888888;
+    }
+    textarea {
+      border: 1.5px solid #cccccc;
+      border-radius: 4px;
+      background: transparent;
+      outline: none;
+      padding: 4px 6px;
+      font-size: 1em;
+      transition: border-color 0.2s;
+    }
+    textarea:focus {
+      border-color: #888888;
+    }
+    button {
+      background-color: #274472;
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      padding: 0.22em 0.6em;
+      font-size: 0.82em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #1b2e4b;
+    }
+    /* 削除ボタンだけさらに小さく */
+    .task-item button {
+      padding: 0.12em 0.4em;
+      font-size: 0.75em;
+      background-color: #b0b7c3;
+      color: #333;
+  border-radius: 2px;
+      margin-left: 0.3em;
+      transition: background 0.2s;
+    }
+    .task-item button:hover {
+      background-color: #888e99;
+    }
+    /* チェック済みタスクの取り消し線 */
+    .task-item.checked input[type="text"] {
+      text-decoration: line-through;
+      color: #888;
+    }
+    body { font-family: sans-serif; margin: 2em; }
+    #calendar { max-width: 900px; margin-top: 2em; }
+    #entry-area {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2em;
+      margin-top: 1em;
+    }
+    #todo-list, #mail-wrapper {
+      padding: 1em;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .task-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.5em;
+      gap: 0.5em;
+    }
+    .task-item input[type="text"], .task-item input[type="email"] {
+      flex: 1;
+      border: none;
+  border-bottom: 1.5px solid #cccccc;
+      background: transparent;
+      outline: none;
+      padding: 2px 4px;
+      transition: border-color 0.2s;
+    }
+    .task-item input[type="text"]:focus, .task-item input[type="email"]:focus {
+      border-bottom: 2px solid #888888;
+    }
+    .fc-event-title { white-space: pre-wrap; }
+    .todo-white {
+      background-color: #ffffff !important;
+      border-color: #cccccc !important;
+      color: #000000 !important;
+    }
+    .todo-white .fc-event-title {
+      color: #000000 !important;
+    }
+    /* 今日の日付を薄い青色に変更 */
+    .fc-day-today {
+      background-color: #e3f2fd !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>業務日報 ToDo カレンダー</h1>
+  <label for="worker">作業者名:</label>
+  <input type="text" id="worker" placeholder="山田太郎" style="margin-right: 2em;">
+  <label for="date">日付:</label>
+  <input type="date" id="date">
+
+  <div>
+    <div id="main-area" style="display: flex; gap: 2em; align-items: flex-start;">
+      <div style="flex: 1; min-width: 320px;">
+        <div style="height: 12px;"></div>
+        <button onclick="sendMail()" style="margin-bottom: 6px;">メールで送信</button>
+        <div id="todo-list">
+          <h3>タスク一覧</h3>
+          <p style="color: #555; font-size: 0.80em;">完了タスクはチェックをいれてください</p>
+          <div style="display: flex; align-items: center; gap: 0.5em; margin-bottom: 0.3em;">
+            <span style="width: 24px;"></span>
+          </div>
+          <div id="tasks"></div>
+          <div style="height: 1em;"></div>
+          <button onclick="addTask()">タスク追加</button>
+          <button onclick="saveTasks()">保存</button>
+          <button onclick="copyIncompleteFromLastTwoWeeks()">過去2週間の未完了タスクをコピー</button>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 320px;">
+        <div style="height: 12px;"></div>
+        <button onclick="toggleSection('mail-wrapper')" style="margin-bottom: 6px;">文面・宛先を表示／隠す</button>
+        <div id="mail-wrapper" style="display: block;">
+          <div id="mail-body">
+            <h3>文面①（冒頭）</h3>
+            <textarea id="body1" rows="6" style="width: 100%;"></textarea>
+            <h3>文面②（締め）</h3>
+            <textarea id="body2" rows="6" style="width: 100%;"></textarea>
+          </div>
+          <div id="mail-area">
+            <h3>送信先（最大15件）</h3>
+            <div id="recipients"></div>
+            <button onclick="addRecipient()">宛先追加</button>
+            <h3>CC（最大15件）</h3>
+            <div id="cc-list"></div>
+            <button onclick="addCc()">CC追加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Outlook送信ボタンはタスク一覧上に移動 -->
+
+  <div id="calendar"></div>
+
+  <div id="overlay" onclick="closeModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999;"></div>
+  <div id="modal" style="display:none; position:fixed; top:20%; left:30%; background:#fff; padding:1em; border:1px solid #ccc; z-index:1000; width:40%;">
+    <h3 id="modal-date"></h3>
+    <div id="modal-tasks"></div>
+    <button onclick="closeModal()">閉じる</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+    <script>
+    const dateInput = document.getElementById('date');
+    const workerInput = document.getElementById('worker');
+    const tasksDiv = document.getElementById('tasks');
+    const recipientsDiv = document.getElementById('recipients');
+    const ccListDiv = document.getElementById('cc-list');
+    const modal = document.getElementById('modal');
+    const overlay = document.getElementById('overlay');
+    const modalDate = document.getElementById('modal-date');
+    const modalTasks = document.getElementById('modal-tasks');
+
+    dateInput.value = new Date().toISOString().split('T')[0];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      workerInput.value = localStorage.getItem('workerName') || '';
+      document.getElementById('body1').value = localStorage.getItem('body1Text') || '';
+      document.getElementById('body2').value = localStorage.getItem('body2Text') || '';
+
+      const savedRecipients = JSON.parse(localStorage.getItem('recipientList') || '[]');
+      savedRecipients.forEach(r => addRecipient(r.name, r.email));
+
+      const savedCc = JSON.parse(localStorage.getItem('ccList') || '[]');
+      savedCc.forEach(r => addCc(r.name, r.email));
+    });
+
+    workerInput.addEventListener('input', e => {
+      localStorage.setItem('workerName', e.target.value.trim());
+    });
+    document.getElementById('body1').addEventListener('input', e => {
+      localStorage.setItem('body1Text', e.target.value);
+    });
+    document.getElementById('body2').addEventListener('input', e => {
+      localStorage.setItem('body2Text', e.target.value);
+    });
+
+    function toggleSection(id) {
+      const section = document.getElementById(id);
+      section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function saveRecipientsToStorage() {
+      const recipientItems = recipientsDiv.querySelectorAll('.task-item');
+      const list = Array.from(recipientItems).map(item => ({
+        name: item.querySelector('input[type="text"]').value.trim(),
+        email: item.querySelector('input[type="email"]').value.trim()
+      })).filter(r => r.email);
+      localStorage.setItem('recipientList', JSON.stringify(list));
+    }
+
+    function saveCcToStorage() {
+      const ccItems = ccListDiv.querySelectorAll('.task-item');
+      const list = Array.from(ccItems).map(item => ({
+        name: item.querySelector('input[type="text"]').value.trim(),
+        email: item.querySelector('input[type="email"]').value.trim()
+      })).filter(r => r.email);
+      localStorage.setItem('ccList', JSON.stringify(list));
+    }
+
+    function addRecipient(name = '', email = '') {
+      if (recipientsDiv.children.length >= 15) {
+        return alert("宛先は最大15件までです");
+      }
+      const div = document.createElement('div');
+      div.className = 'task-item';
+      div.innerHTML = `
+        <input type="text" placeholder="名前" value="${name}" style="width: 40%;" oninput="saveRecipientsToStorage()">
+        <input type="email" placeholder="メールアドレス" value="${email}" style="width: 60%;" oninput="saveRecipientsToStorage()">
+        <button onclick="this.parentElement.remove(); saveRecipientsToStorage()">削除</button>
+      `;
+      recipientsDiv.appendChild(div);
+      saveRecipientsToStorage();
+    }
+
+    function addCc(name = '', email = '') {
+      if (ccListDiv.children.length >= 15) {
+        return alert("CCは最大15件までです");
+      }
+      const div = document.createElement('div');
+      div.className = 'task-item';
+      div.innerHTML = `
+        <input type="text" placeholder="名前" value="${name}" style="width: 40%;" oninput="saveCcToStorage()">
+        <input type="email" placeholder="メールアドレス" value="${email}" style="width: 60%;" oninput="saveCcToStorage()">
+        <button onclick="this.parentElement.remove(); saveCcToStorage()">削除</button>
+      `;
+      ccListDiv.appendChild(div);
+      saveCcToStorage();
+    }
+
+    function addTask(text = '', done = false) {
+      const div = document.createElement('div');
+      div.className = 'task-item' + (done ? ' checked' : '');
+      div.innerHTML = `
+        <input type="checkbox" ${done ? 'checked' : ''} style="width: 24px;">
+        <input type="text" value="${text}">
+        <button onclick="this.parentElement.remove()">削除</button>
+      `;
+      // チェック状態変更時にクラス付与
+      const checkbox = div.querySelector('input[type="checkbox"]');
+      checkbox.addEventListener('change', function() {
+        if (checkbox.checked) {
+          div.classList.add('checked');
+        } else {
+          div.classList.remove('checked');
+        }
+      });
+      // 初期状態反映
+      if (done) div.classList.add('checked');
+      tasksDiv.appendChild(div);
+    }
+
+      function copyIncompleteFromLastTwoWeeks() {
+  const today = new Date(dateInput.value);
+  const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+  const copiedTaskSet = new Set();
+
+  for (let i = 1; i <= 14; i++) {
+    const pastDate = new Date(today);
+    pastDate.setDate(today.getDate() - i);
+    const ymd = pastDate.toISOString().split('T')[0];
+    const tasks = reports[ymd] || [];
+
+    tasks.forEach(t => {
+      let normalizedTask = t.task
+        .trim()                    // 前後の空白除去
+        .replace(/\s+/g, ' ')      // 連続する空白を1つに
+        .replace(/[　]/g, ' ')     // 全角スペースを半角に
+        
+
+      if (!t.done && normalizedTask !== '') {
+        copiedTaskSet.add(normalizedTask);
+      }
+    });
+  }
+
+  const copiedTasks = Array.from(copiedTaskSet);
+
+  if (copiedTasks.length === 0) {
+    alert("過去2週間に未完了のタスクはありません");
+    return;
+  }
+
+  copiedTasks.forEach(task => addTask(task, false));
+  alert(`過去2週間の未完了タスク（${copiedTasks.length}件）をコピーしました`);
+}
+
+    function saveTasks() {
+      const date = dateInput.value;
+      const currentMonth = date.slice(0, 7);
+      const lastSavedMonth = localStorage.getItem('lastSavedMonth');
+
+      const taskItems = tasksDiv.querySelectorAll('.task-item');
+      const tasks = Array.from(taskItems).map((item, index) => ({
+        task: item.querySelector('input[type="text"]').value,
+        done: item.querySelector('input[type="checkbox"]').checked,
+        order: index
+      })).filter(t => t.task.trim() !== '');
+
+      const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+      reports[date] = tasks;
+      localStorage.setItem('todoReports', JSON.stringify(reports));
+
+      if (lastSavedMonth && lastSavedMonth !== currentMonth) {
+        exportMonthlyCSV(lastSavedMonth);
+      }
+      localStorage.setItem('lastSavedMonth', currentMonth);
+
+      renderCalendar();
+      alert("保存しました（前月CSVも出力されます）");
+    }
+
+    function sendMail() {
+      const date = dateInput.value;
+      const workerName = workerInput.value.trim();
+      const recipientItems = recipientsDiv.querySelectorAll('.task-item');
+      const ccItems = ccListDiv.querySelectorAll('.task-item');
+      const body1 = document.getElementById('body1').value.trim();
+      const body2 = document.getElementById('body2').value.trim();
+
+      const emails = Array.from(recipientItems).map(item => {
+        const name = item.querySelector('input[type="text"]').value.trim();
+        const email = item.querySelector('input[type="email"]').value.trim();
+        return email ? `${name ? name + ' ' : ''}<${email}>` : '';
+      }).filter(e => e);
+
+      const ccList = Array.from(ccItems).map(item => {
+        const name = item.querySelector('input[type="text"]').value.trim();
+        const email = item.querySelector('input[type="email"]').value.trim();
+        return email ? `${name ? name + ' ' : ''}<${email}>` : '';
+      }).filter(e => e);
+
+      if (emails.length === 0) return alert("少なくとも1件の宛先を入力してください");
+
+      const taskItems = tasksDiv.querySelectorAll('.task-item');
+      const tasks = Array.from(taskItems).map(item => {
+        const text = item.querySelector('input[type="text"]').value;
+        const done = item.querySelector('input[type="checkbox"]').checked;
+        return `${done ? '[完]' : '[未]'} ${text}`;
+      }).filter(t => t.trim() !== '');
+
+      if (tasks.length === 0) return alert("タスクがありません");
+
+      const subject = `業務日報 ${date}${workerName ? ' - ' + workerName : ''}`;
+      const bodyParts = [];
+        if (body1) bodyParts.push(body1);
+        bodyParts.push('', '' ); // 改行2つ
+        bodyParts.push('[作業内容]');
+        bodyParts.push(...tasks);
+        bodyParts.push('', ''); // 改行2つ
+        if (body2) bodyParts.push(body2);
+
+      const body = encodeURIComponent(bodyParts.join('\n'));
+      const to = encodeURIComponent(emails.join('; '));
+      const ccParam = ccList.length ? `&cc=${encodeURIComponent(ccList.join('; '))}` : '';
+      const mailto = `mailto:${to}?subject=${subject}&body=${body}${ccParam}`;
+      window.location.href = mailto;
+    }
+
+
+        function exportMonthlyCSV(month) {
+      const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+      let csv = '日付,完了,タスク\n';
+
+      for (const [date, tasks] of Object.entries(reports)) {
+        if (date.startsWith(month)) {
+          tasks.forEach(t => {
+            csv += `"${date}","${t.done ? '✔️' : '❌'}","${t.task.replace(/"/g, '""')}"\n`;
+          });
+        }
+      }
+
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `業務日報-${month.replace('-', '')}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function renderCalendar() {
+      const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+      const events = [];
+
+      for (const [date, tasks] of Object.entries(reports)) {
+        tasks.forEach((t, index) => {
+          events.push({
+            title: `${t.done ? '✔️' : '❌'} ${t.task}`,
+            start: date,
+            allDay: true,
+            classNames: ['todo-white'],
+            extendedProps: { order: t.order ?? index }
+          });
+        });
+      }
+
+      const calendarEl = document.getElementById('calendar');
+      calendarEl.innerHTML = '';
+
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ja',
+        eventDisplay: 'block',
+        dayMaxEvents: false,
+        eventOrder: 'order',
+        events,
+        eventClick(info) {
+          modalDate.textContent = info.event.startStr;
+          modalTasks.innerHTML = '';
+          const date = info.event.startStr;
+          const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+          const tasks = reports[date] || [];
+          tasks.forEach(t => {
+            const div = document.createElement('div');
+            div.textContent = `${t.done ? '✔️' : '❌'} ${t.task}`;
+            modalTasks.appendChild(div);
+          });
+          modal.style.display = 'block';
+          overlay.style.display = 'block';
+        }
+      });
+
+      calendar.render();
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      overlay.style.display = 'none';
+    }
+
+    function loadTasks() {
+      tasksDiv.innerHTML = '';
+      const reports = JSON.parse(localStorage.getItem('todoReports') || '{}');
+      const tasks = reports[dateInput.value] || [];
+      tasks.forEach(t => addTask(t.task, t.done));
+    }
+
+    dateInput.addEventListener('change', loadTasks);
+    renderCalendar();
+    loadTasks();
+  </script>
+</body>
+</html>
